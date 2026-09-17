@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { environment } from '../../../environments/environment';
 import { CountryData, RESTCountry } from '../interfaces/rest-countries.interfaces';
-import { catchError, delay, map, Observable, throwError } from 'rxjs';
+import { catchError, delay, map, Observable, of, tap, throwError } from 'rxjs';
 import type { Country } from '../interfaces/country.interface';
 import { CountryMapper } from '../mappers/country.mapper';
 
@@ -11,9 +11,16 @@ const API_URL = 'https://api.restcountries.com/countries/v5';
 @Injectable({ providedIn: 'root' })
 export class CountryService {
   private http = inject(HttpClient);
+  private queryCacheCapital = new Map<string, Country[]>();
 
   searchByCapital(query: string): Observable<Country[]> {
     query = query.toLowerCase();
+
+    if (this.queryCacheCapital.has(query)) {
+      return of(this.queryCacheCapital.get(query) ?? []);
+    }
+
+    console.log(`Llegando al servidor por ${query}`);
 
     return this.http
       .get<RESTCountry>(`${API_URL}/capitals`, {
@@ -26,6 +33,7 @@ export class CountryService {
       })
       .pipe(
         map((resp) => CountryMapper.mapRestCountryToCountryArray(resp.data.objects)),
+        tap((countries) => this.queryCacheCapital.set(query, countries)),
         catchError((error) => {
           console.log('Error fetching', error);
 
@@ -64,7 +72,7 @@ export class CountryService {
     return this.http
       .get<RESTCountry>(url, {
         headers: {
-          Autorization: `Bearer ${environment.apiKey}`,
+          Authorization: `Bearer ${environment.apiKey}`,
         },
       })
       .pipe(
