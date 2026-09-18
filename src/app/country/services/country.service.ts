@@ -5,6 +5,7 @@ import { CountryData, RESTCountry } from '../interfaces/rest-countries.interface
 import { catchError, delay, map, Observable, of, tap, throwError } from 'rxjs';
 import type { Country } from '../interfaces/country.interface';
 import { CountryMapper } from '../mappers/country.mapper';
+import { Region } from '../interfaces/region.type';
 
 const API_URL = 'https://api.restcountries.com/countries/v5';
 
@@ -12,6 +13,8 @@ const API_URL = 'https://api.restcountries.com/countries/v5';
 export class CountryService {
   private http = inject(HttpClient);
   private queryCacheCapital = new Map<string, Country[]>();
+  private queryCacheCountry = new Map<string, Country[]>();
+  private queryCacheRegion = new Map<Region, Country[]>();
 
   searchByCapital(query: string): Observable<Country[]> {
     query = query.toLowerCase();
@@ -19,8 +22,6 @@ export class CountryService {
     if (this.queryCacheCapital.has(query)) {
       return of(this.queryCacheCapital.get(query) ?? []);
     }
-
-    console.log(`Llegando al servidor por ${query}`);
 
     return this.http
       .get<RESTCountry>(`${API_URL}/capitals`, {
@@ -45,6 +46,10 @@ export class CountryService {
   searchByCountry(query: string): Observable<Country[]> {
     query = query.toLowerCase();
 
+    if (this.queryCacheCountry.has(query)) {
+      return of(this.queryCacheCountry.get(query) ?? []);
+    }
+
     return this.http
       .get<RESTCountry>(`${API_URL}/names.common`, {
         params: {
@@ -56,7 +61,35 @@ export class CountryService {
       })
       .pipe(
         map((resp) => CountryMapper.mapRestCountryToCountryArray(resp.data.objects)),
-        delay(3000),
+        tap((countries) => this.queryCacheCountry.set(query, countries)),
+        delay(2000),
+        catchError((error) => {
+          console.log('Error fetching', error);
+
+          return throwError(() => new Error('No se pudo obtener países con ese query'));
+        }),
+      );
+  }
+
+  searchByRegion(region: Region): Observable<Country[]> {
+    const url = `${API_URL}/region/${region}`;
+
+    if (this.queryCacheRegion.has(region)) {
+      return of(this.queryCacheRegion.get(region) ?? []);
+    }
+
+    return this.http
+      .get<RESTCountry>(url, {
+        params: {
+          q: region,
+        },
+        headers: {
+          Authorization: `Bearer ${environment.apiKey}`,
+        },
+      })
+      .pipe(
+        map((resp) => CountryMapper.mapRestCountryToCountryArray(resp.data.objects)),
+        tap((countries) => this.queryCacheRegion.set(region, countries)),
         catchError((error) => {
           console.log('Error fetching', error);
 
